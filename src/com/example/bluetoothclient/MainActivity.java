@@ -28,7 +28,8 @@ public class MainActivity extends Activity {
 		public void onClick(View v) {
 
 			String mac = macAddress.getText().toString();
-			Intent doConnect = new Intent(Intent.ACTION_SEARCH);
+			if (mac == "") {mac = "XX:XX:XX:XX:XX:XX";}
+			Intent doConnect = new Intent(MainActivity.this, doConnect.class);
 			doConnect.setPackage("com.google.android.youtube");
 			doConnect.putExtra("mac", mac);
 			doConnect.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
