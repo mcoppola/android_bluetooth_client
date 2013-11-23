@@ -6,22 +6,29 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.UUID;
 
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Point;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.telephony.TelephonyManager;
 import android.util.Log;
+import android.view.Display;
 import android.view.Menu;
+import android.view.MotionEvent;
+import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
+@TargetApi(Build.VERSION_CODES.HONEYCOMB_MR2)
 public class doConnect extends Activity{
 	
 	TextView textLogView;
@@ -37,6 +44,7 @@ public class doConnect extends Activity{
     // RFCOMM channel 1 (default) if not in use);
     // see comments in onResume().
     private UUID MY_UUID = null;
+    private Point windowSize = new Point();
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -70,9 +78,28 @@ public class doConnect extends Activity{
 	            return;
 	    }
 	    
+	    // get size of window to send to server
+	    Display display = getWindowManager().getDefaultDisplay();
+	    display.getSize(windowSize);
+	    
 	    ConnectThread doConnect = new ConnectThread(mac, MY_UUID);
 	    Thread connectThread = new Thread(doConnect);
 	    connectThread.run();
+	   
+	    
+	    final View touchView = findViewById(R.id.whole_view);
+	    touchView.setOnTouchListener(new View.OnTouchListener() {
+
+			@Override
+			public boolean onTouch(View v, MotionEvent event) {
+				textLogView.setText(String.valueOf(event.getX()) + " x " + String.valueOf(event.getY()));
+	            WriterThread doConnect = new WriterThread("{ \"x\":\""+ event.getX() + 
+	            		"\", \"y\":\""+ event.getY() + "\"}");
+	    	    Thread connectThread = new Thread(doConnect);
+	    	    connectThread.run();
+				return false;
+			}
+	    });
 	    
 	    
 	}
@@ -88,13 +115,6 @@ public class doConnect extends Activity{
 	        Log.v(TAG, "uuid ===" + uuid);
 	        
 	        // Get a BluetoothSocket to connect with the given BluetoothDevice
-/*	        try {
-	            // MY_UUID is the app's UUID string, also used by the server code
-	            tmp = device.createRfcommSocketToServiceRecord(uuid);
-	            
-	        } catch (IOException e) { }
-	        mmSocket = tmp;*/
-	        
 	        device = BluetoothAdapter.getDefaultAdapter().getRemoteDevice(mac); 
 	        
 	        try {
@@ -110,11 +130,8 @@ public class doConnect extends Activity{
 	    }
 	 
 	    public void run() {
-	        
 	    	// Cancel discovery because it will slow down the connection
 	        mBluetoothAdapter.cancelDiscovery();
-	        
-	        
 	        if (D)
 				logText = logText + "TRYING TO CONNECT\n";
 	            textLogView.setText(logText);
@@ -131,6 +148,7 @@ public class doConnect extends Activity{
 	            	if (D)
 	    				logText = logText + "CONNECTION FAILED\n";
 	    	            textLogView.setText(logText);
+	    	            cancel();
 	            }
 	            return;
 	        }
@@ -138,9 +156,16 @@ public class doConnect extends Activity{
 	        if (D)
 				logText = logText + "CONNECTED TO SERVER\n";
 	            textLogView.setText(logText);
-	 
-	        // Do write
-	        doWriteToSocket(mmSocket);
+	            
+	        // initiate connect, send window size
+	        WriteToServer(mmSocket, "{\"width\":\""+ windowSize.x + "\",\"height\":\"" + windowSize.y+ "\"}");
+	        
+	        // set socket to global
+	        btSocket = mmSocket;
+		    
+		    // let user know
+		    logText = "YOU ARE CONNECTED, SENDING DATA";
+            textLogView.setText(logText);
 	    }
 	 
 	    /** Will cancel an in-progress connection, and close the socket */
@@ -152,25 +177,36 @@ public class doConnect extends Activity{
 	    
 	}
 	
-	public void doWriteToSocket(BluetoothSocket btSocket) {
+	public class WriterThread extends Thread {
+		private String message = "";
+		private BluetoothSocket socket;
+		
+		public WriterThread (String message){
+			this.message = message;
+			this.socket = btSocket;
+		}
+		
+		public void run(){
+			WriteToServer(socket, message);
+		}
+		
+		
+	}
+	
+	public void WriteToServer (BluetoothSocket btSocket, String message) {
 		try {
             outStream = btSocket.getOutputStream();
 	    } catch (IOException e) {
 	            Log.e(TAG, "ON RESUME: Output stream creation failed.", e);
 	    }
-	
-	    String message = "Hello message from client to server.";
+
 	    byte[] msgBuffer = message.getBytes();
 	    try {
 	            outStream.write(msgBuffer);
 	    } catch (IOException e) {
 	            Log.e(TAG, "ON RESUME: Exception during write.", e);
 	    }
-	    
-	    if (D)
-			logText = logText + "Write Successful\n";
-            textLogView.setText(logText);
-		
+	    		
 	}
 	
 
